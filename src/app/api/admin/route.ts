@@ -9,11 +9,7 @@ import sharp from 'sharp';
 (global as any).fetch = fetch;
 
 // Worker config
-// For Vercel/serverless environments
-(pdfjsLib as any).GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/legacy/build/pdf.worker.js',
-  import.meta.url
-).toString();
+(pdfjsLib as any).GlobalWorkerOptions.workerSrc = 'pdfjs-dist/legacy/build/pdf.worker.js';
 
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
