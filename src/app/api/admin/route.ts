@@ -10,10 +10,14 @@ import sharp from 'sharp';
 
 // Worker config
 // For Vercel/serverless environments
-(pdfjsLib as any).GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/legacy/build/pdf.worker.js',
-  import.meta.url
-).toString();
+// Disable worker in serverless environment
+if (typeof window === 'undefined') {
+  // Server environment
+  (pdfjsLib as any).GlobalWorkerOptions.workerSrc = false;
+} else {
+  // Client environment
+  (pdfjsLib as any).GlobalWorkerOptions.workerSrc = 'pdfjs-dist/legacy/build/pdf.worker.js';
+}
 
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
