@@ -4,7 +4,7 @@ import { Canvas, createCanvas } from 'canvas';
 import { createWorker, RecognizeResult } from 'tesseract.js';
 import axios from 'axios';
 import sharp from 'sharp';
-import fetch from 'node-fetch';
+
 
 (global as any).fetch = fetch;
 
