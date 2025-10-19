@@ -118,7 +118,7 @@ async function detectPDFType(buffer: Buffer): Promise<PDFInfo> {
           includeMarkedContent: true
         });
         
-        const pageText = textContentObj.items.map(item => item.str).join(' ');
+        const pageText = textContentObj.items.map(item => item).join(' ');
         textContent += pageText + ' ';
         
         console.log(`Page ${i} has ${pageText.length} characters`);
@@ -187,12 +187,12 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
         const page = await pdf.getPage(i);
         
         const textContent = await page.getTextContent({
-          disableCombineTextItems: false,
+      
           includeMarkedContent: true
         });
         
         const pageText = textContent.items
-          .map(item => item.str)
+          .map(item => item)
           .filter(str => str.trim().length > 0)
           .join(' ');
         
@@ -318,7 +318,7 @@ async function extractTextWithOCR(imageBuffer: Buffer, pageNum: number): Promise
 // Enhanced prompt for both text and image PDFs
 function createEnhancedPrompt(textData: TextData, pageNum: number | string = 'full_document', extractionMethod: string = 'direct'): string {
   let patternInfo = "No clear answer patterns detected.";
-  let pageInfo = extractionMethod === 'direct' ? 'the entire document' : `page ${pageNum}`;
+  const pageInfo = extractionMethod === 'direct' ? 'the entire document' : `page ${pageNum}`;
   
   if (textData.correctAnswerPattern) {
     patternInfo = `PATTERN DETECTION: Found marker for answer ${textData.correctAnswerPattern}. This is LIKELY the correct answer.`;
@@ -357,7 +357,7 @@ function parseAPIResponse(response: string | null, patternAnswer: string | null,
   if (!response) return [];
   
   try {
-    let cleanResponse = response.replace(/```json|```/g, '').trim();
+    const cleanResponse = response.replace(/```json|```/g, '').trim();
     const jsonMatch = cleanResponse.match(/\[\s*{[\s\S]*}\s*\]/);
     
     let questions: Question[] = [];
