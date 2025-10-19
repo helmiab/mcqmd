@@ -100,6 +100,7 @@ async function detectPDFType(buffer: Buffer): Promise<PDFInfo> {
       stopAtErrors: false,
       maxImageSize: -1,
       disableFontFace: true,
+
     });
     
     const pdf = await loadingTask.promise;
@@ -115,10 +116,13 @@ async function detectPDFType(buffer: Buffer): Promise<PDFInfo> {
         console.log(`Analyzing page ${i} for text...`);
         const page = await pdf.getPage(i);
         const textContentObj = await page.getTextContent({
+    
           includeMarkedContent: true
         });
         
-        const pageText = textContentObj.items.map(item => item).join(' ');
+const pageText = textContentObj.items
+  .map(item => 'str' in item ? item.str : '')
+  .join(' ');
         textContent += pageText + ' ';
         
         console.log(`Page ${i} has ${pageText.length} characters`);
@@ -169,7 +173,7 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
       stopAtErrors: false,
       maxImageSize: -1,
       disableFontFace: true,
-
+ 
       isEvalSupported: false,
       disableRange: false,
       disableStream: false,
@@ -186,15 +190,13 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
         console.log(`Extracting text from page ${i}...`);
         const page = await pdf.getPage(i);
         
-        const textContent = await page.getTextContent({
-      
-          includeMarkedContent: true
-        });
-        
-        const pageText = textContent.items
-          .map(item => item)
-          .filter(str => str.trim().length > 0)
-          .join(' ');
+       const textContent = await page.getTextContent({
+  includeMarkedContent: true
+});
+const pageText = textContent.items
+  .map(item => 'str' in item ? item.str : '')
+  .filter(str => str.trim().length > 0)
+  .join(' ');
         
         fullText += `\n--- Page ${i} ---\n${pageText}\n`;
         console.log(`✅ Page ${i}: Extracted ${pageText.length} characters`);
@@ -247,10 +249,10 @@ async function convertPDFToImages(buffer: Buffer): Promise<{ page: number; image
       context.fillStyle = 'white';
       context.fillRect(0, 0, viewport.width, viewport.height);
       
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport
-      };
+  const renderContext = {
+  canvasContext: context as any,
+  viewport: viewport
+};
       
       await page.render(renderContext).promise;
       
@@ -280,10 +282,10 @@ async function extractTextWithOCR(imageBuffer: Buffer, pageNum: number): Promise
   const worker = await createWorker('eng');
   
   try {
-    await worker.setParameters({
-      tessedit_pageseg_mode: '6',
-      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,?!()[]{}:;-/\n\t✓*✅x',
-    });
+await worker.setParameters({
+  tessedit_pageseg_mode: 6, // Use number instead of string
+  tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,?!()[]{}:;-/\n\t✓*✅x',
+} as any);
     
     const { data }: RecognizeResult = await worker.recognize(imageBuffer);
     await worker.terminate();
@@ -318,7 +320,7 @@ async function extractTextWithOCR(imageBuffer: Buffer, pageNum: number): Promise
 // Enhanced prompt for both text and image PDFs
 function createEnhancedPrompt(textData: TextData, pageNum: number | string = 'full_document', extractionMethod: string = 'direct'): string {
   let patternInfo = "No clear answer patterns detected.";
-  const pageInfo = extractionMethod === 'direct' ? 'the entire document' : `page ${pageNum}`;
+  let pageInfo = extractionMethod === 'direct' ? 'the entire document' : `page ${pageNum}`;
   
   if (textData.correctAnswerPattern) {
     patternInfo = `PATTERN DETECTION: Found marker for answer ${textData.correctAnswerPattern}. This is LIKELY the correct answer.`;
@@ -357,7 +359,7 @@ function parseAPIResponse(response: string | null, patternAnswer: string | null,
   if (!response) return [];
   
   try {
-    const cleanResponse = response.replace(/```json|```/g, '').trim();
+    let cleanResponse = response.replace(/```json|```/g, '').trim();
     const jsonMatch = cleanResponse.match(/\[\s*{[\s\S]*}\s*\]/);
     
     let questions: Question[] = [];

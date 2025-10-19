@@ -50,13 +50,14 @@ export async function POST(request: NextRequest) {
     // Transform questions to match database schema
     const questionsToInsert = questions.map((q: Question) => {
       // Handle page field - convert 'full_document' to NULL or a specific value
-      let pageValue = q.page;
-      
-      if (pageValue === 'full_document' || isNaN(Number(pageValue))) {
-        pageValue = null;
-      } else {
-        pageValue = Number(pageValue);
-      }
+// Handle page field - convert 'full_document' to NULL or a specific value
+let pageValue: string | number | null | undefined = q.page;
+
+if (pageValue === 'full_document' || (pageValue && isNaN(Number(pageValue)))) {
+  pageValue = null;
+} else if (pageValue) {
+  pageValue = Number(pageValue);
+}
 
       return {
         question_text: q.question,
