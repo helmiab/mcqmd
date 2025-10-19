@@ -100,7 +100,6 @@ async function detectPDFType(buffer: Buffer): Promise<PDFInfo> {
       stopAtErrors: false,
       maxImageSize: -1,
       disableFontFace: true,
-      nativeImageDecoderSupport: 'none'
     });
     
     const pdf = await loadingTask.promise;
@@ -116,7 +115,6 @@ async function detectPDFType(buffer: Buffer): Promise<PDFInfo> {
         console.log(`Analyzing page ${i} for text...`);
         const page = await pdf.getPage(i);
         const textContentObj = await page.getTextContent({
-          disableCombineTextItems: false,
           includeMarkedContent: true
         });
         
@@ -171,7 +169,7 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
       stopAtErrors: false,
       maxImageSize: -1,
       disableFontFace: true,
-      nativeImageDecoderSupport: 'none',
+
       isEvalSupported: false,
       disableRange: false,
       disableStream: false,
