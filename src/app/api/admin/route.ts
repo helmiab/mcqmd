@@ -10,7 +10,6 @@ import sharp from 'sharp';
 
 // Worker config
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = 'pdfjs-dist/legacy/build/pdf.worker.js';
-
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 // Types for extracted data
