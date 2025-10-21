@@ -1,15 +1,21 @@
 import fs from 'fs';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
-import { Canvas, createCanvas } from 'canvas';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js'; 
 import { createWorker, RecognizeResult } from 'tesseract.js';
 import axios from 'axios';
 import sharp from 'sharp';
 
 
-(global as any).fetch = fetch;
+
 
 // Worker config
-(pdfjsLib as any).GlobalWorkerOptions.workerSrc = 'pdfjs-dist/legacy/build/pdf.worker.js';
+async function initializePDFJS() {
+  try {
+    // This ensures the worker is loaded in serverless environments
+    await import('pdfjs-dist/legacy/build/pdf.worker.js');
+  } catch (error) {
+    console.log('Worker import failed, continuing without explicit worker initialization');
+  }
+}
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 // Types for extracted data
@@ -88,9 +94,14 @@ function findCorrectAnswerByPatterns(text: string): string | null {
 }
 
 // Detect PDF type from buffer
+// Detect PDF type from buffer
 async function detectPDFType(buffer: Buffer): Promise<PDFInfo> {
   try {
     console.log('🔍 Detecting PDF type...');
+    
+    // Initialize PDF.js for serverless
+    await initializePDFJS();
+    
     const uint8Array = new Uint8Array(buffer);
     
     const loadingTask = pdfjsLib.getDocument({
@@ -99,7 +110,6 @@ async function detectPDFType(buffer: Buffer): Promise<PDFInfo> {
       stopAtErrors: false,
       maxImageSize: -1,
       disableFontFace: true,
-
     });
     
     const pdf = await loadingTask.promise;
@@ -115,13 +125,12 @@ async function detectPDFType(buffer: Buffer): Promise<PDFInfo> {
         console.log(`Analyzing page ${i} for text...`);
         const page = await pdf.getPage(i);
         const textContentObj = await page.getTextContent({
-    
           includeMarkedContent: true
         });
         
-const pageText = textContentObj.items
-  .map(item => 'str' in item ? item.str : '')
-  .join(' ');
+        const pageText = textContentObj.items
+          .map(item => 'str' in item ? item.str : '')
+          .join(' ');
         textContent += pageText + ' ';
         
         console.log(`Page ${i} has ${pageText.length} characters`);
@@ -161,9 +170,14 @@ const pageText = textContentObj.items
 }
 
 // Extract text directly from PDF (for text-based PDFs)
+// Extract text directly from PDF (for text-based PDFs)
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   try {
     console.log('📖 Extracting text directly from PDF...');
+    
+    // Initialize PDF.js for serverless
+    await initializePDFJS();
+    
     const uint8Array = new Uint8Array(buffer);
     
     const loadingTask = pdfjsLib.getDocument({
@@ -172,7 +186,6 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
       stopAtErrors: false,
       maxImageSize: -1,
       disableFontFace: true,
- 
       isEvalSupported: false,
       disableRange: false,
       disableStream: false,
@@ -189,13 +202,13 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
         console.log(`Extracting text from page ${i}...`);
         const page = await pdf.getPage(i);
         
-       const textContent = await page.getTextContent({
-  includeMarkedContent: true
-});
-const pageText = textContent.items
-  .map(item => 'str' in item ? item.str : '')
-  .filter(str => str.trim().length > 0)
-  .join(' ');
+        const textContent = await page.getTextContent({
+          includeMarkedContent: true
+        });
+        const pageText = textContent.items
+          .map(item => 'str' in item ? item.str : '')
+          .filter(str => str.trim().length > 0)
+          .join(' ');
         
         fullText += `\n--- Page ${i} ---\n${pageText}\n`;
         console.log(`✅ Page ${i}: Extracted ${pageText.length} characters`);
@@ -219,9 +232,14 @@ const pageText = textContent.items
 }
 
 // Convert PDF to images (for image-based PDFs)
+// Convert PDF to images (for image-based PDFs)
 async function convertPDFToImages(buffer: Buffer): Promise<{ page: number; imageBuffer: Buffer; width: number; height: number }[]> {
   try {
     console.log('🖼️ Converting PDF to high-quality images...');
+    
+    // Initialize PDF.js for serverless
+    await initializePDFJS();
+    
     const uint8Array = new Uint8Array(buffer);
     
     const loadingTask = pdfjsLib.getDocument({
@@ -242,16 +260,18 @@ async function convertPDFToImages(buffer: Buffer): Promise<{ page: number; image
       
       const viewport = page.getViewport({ scale: 2.5 });
       
+      // Use dynamic require for canvas to avoid serverless issues
+      const { createCanvas } = require('canvas');
       const canvas = createCanvas(viewport.width, viewport.height);
       const context = canvas.getContext('2d');
       
       context.fillStyle = 'white';
       context.fillRect(0, 0, viewport.width, viewport.height);
       
-  const renderContext = {
-  canvasContext: context as any,
-  viewport: viewport
-};
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport
+      };
       
       await page.render(renderContext).promise;
       
