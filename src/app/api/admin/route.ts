@@ -22,7 +22,7 @@ const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 interface TextData {
   rawText: string;
   cleanedText: string;
-  correctAnswerPattern: string | null;
+  correctAnswerPattern: string[] | null;
   confidence: number;
 }
 
@@ -427,7 +427,7 @@ function parseAPIResponse(response: string | null, patternAnswer: string | null,
   if (!response) return [];
   
   try {
-    let cleanResponse = response.replace(/```json|```/g, '').trim();
+    const cleanResponse = response.replace(/```json|```/g, '').trim();
     const jsonMatch = cleanResponse.match(/\[\s*{[\s\S]*}\s*\]/);
     
     let questions: Question[] = [];
