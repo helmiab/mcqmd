@@ -713,7 +713,7 @@ function assignPatternsToQuestions(questions: Question[], fullText: string): Que
     const questionPatterns = findCorrectAnswerForQuestion(question.question, fullText);
     return {
       ...question,
-      patternDetected: questionPatterns.length > 0 ? questionPatterns : undefined
+      patternDetected: questionPatterns.length > 0 ? questionPatterns.join(', ') : undefined
     };
   });
 }

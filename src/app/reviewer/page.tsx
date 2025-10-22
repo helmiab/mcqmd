@@ -7,7 +7,7 @@ interface Question {
   id: string;
   question_text: string;
   options: string[];
-  correct_answer: string[];
+  correct_answer: string[] | string; 
   confidence: string;
   extraction_method: string;
   pattern_detected?: string;
@@ -60,13 +60,14 @@ export default function Reviewer() {
       authListener.subscription.unsubscribe();
     };
   }, []);
-
 useEffect(() => {
   if (currentQuestion) {
     console.log('Raw correct_answer:', currentQuestion.correct_answer);
+    console.log('Type of correct_answer:', typeof currentQuestion.correct_answer);
     
     let cleanedAnswers: string[] = [];
     
+    // First, check if it's an array
     if (Array.isArray(currentQuestion.correct_answer)) {
       // If it's already an array, clean it
       cleanedAnswers = currentQuestion.correct_answer
@@ -77,7 +78,9 @@ useEffect(() => {
           answer.trim() !== ','
         )
         .map(answer => answer.trim());
-    } else if (typeof currentQuestion.correct_answer === 'string') {
+    } 
+    // Check if it's a string using type guard
+    else if (typeof currentQuestion.correct_answer === 'string') {
       // If it's a string, split by commas and clean
       cleanedAnswers = currentQuestion.correct_answer
         .split(',')
@@ -87,6 +90,14 @@ useEffect(() => {
           answer.trim() !== ','
         )
         .map(answer => answer.trim());
+    }
+    // Handle other cases (null, undefined, numbers, etc.)
+    else if (currentQuestion.correct_answer) {
+      // Convert to string and handle as single answer
+      const answerStr = String(currentQuestion.correct_answer);
+      if (answerStr.trim() !== '') {
+        cleanedAnswers = [answerStr.trim()];
+      }
     }
     
     console.log('Cleaned answers:', cleanedAnswers);

@@ -104,7 +104,13 @@ export async function POST(request: NextRequest) {
       console.log(`🧹 Cleaning question ${index + 1}: "${q.question.substring(0, 50)}..."`);
 
       // FIXED: Handle correct_answer properly based on actual data format
-const  answers = q.correctAnswer.map(mapToLetter);
+const answers = (q.correctAnswer || [])
+  .map(answer => {
+    const num = Number(answer);
+    return isNaN(num) ? -1 : num; // Convert to number, mark invalid as -1
+  })
+  .filter(num => num >= 0 && num <= 25) // Only keep valid numbers
+  .map(mapToLetter);
 
       const cleanedQuestion = {
         question_text: debugCleanText(q.question, `question ${index + 1} text`),
@@ -182,7 +188,7 @@ const  answers = q.correctAnswer.map(mapToLetter);
     );
   }
 }
-function mapToLetter(num) {
+function mapToLetter(num: number): string {
   if (num < 0 || num > 25) {
     return 'Invalid';
   }
