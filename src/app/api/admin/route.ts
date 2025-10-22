@@ -29,7 +29,7 @@ interface TextData {
 interface Question {
   question: string;
   options: string[];
-  correctAnswer: number;
+  correctAnswer: number[];
   confidence: string;
   page?: number | string;
   extractionMethod?: string;
@@ -69,7 +69,7 @@ function cleanOCRText(text: string | null): string {
 }
 
 // Pattern detection
-function findCorrectAnswerByPatterns(text: string): string | null {
+function findCorrectAnswerByPatterns(text: string): string[] {
   const patterns = [
     /✓\s*[A-D]/gi,
     /\*\s*[A-D]/gi,
@@ -79,18 +79,65 @@ function findCorrectAnswerByPatterns(text: string): string | null {
     /[A-D].*?\[answer\]/gi,
     /correct.*?[A-D]/gi,
     /answer.*?[A-D]/gi,
+    // Multiple answer patterns
+    /[A-D].*?[A-D]/g, // Multiple letters together like "AB" or "A,C"
+    /correct.*?[A-D].*?[A-D]/gi, // Multiple correct answers in same line
+    /answers?.*?[A-D].*?[A-D]/gi, // "answers: A and C" pattern
+    /[A-D]\s*&\s*[A-D]/gi, // "A & B" pattern
+    /[A-D]\s*,\s*[A-D]/gi, // "A, C" pattern
+    /[A-D]\s+[A-D]/gi, // "A B" pattern (space separated)
   ];
+  
+  const foundAnswers: string[] = [];
   
   for (const pattern of patterns) {
     const matches = text.match(pattern);
     if (matches) {
-      const answerChar = matches[0].match(/[A-D]/i);
-      if (answerChar) {
-        return answerChar[0].toUpperCase();
-      }
+      matches.forEach(match => {
+        // Extract all A-D characters from the match
+        const answerChars = match.match(/[A-D]/gi);
+        if (answerChars) {
+          answerChars.forEach(char => {
+            const upperChar = char.toUpperCase();
+            if (!foundAnswers.includes(upperChar)) {
+              foundAnswers.push(upperChar);
+            }
+          });
+        }
+      });
     }
   }
-  return null;
+  
+  // Also look for explicit multiple answer indicators
+  const multiPatterns = [
+    /multiple.*?answers?:?\s*([A-D, ]+)/gi,
+    /select.*?all.*?that.*?apply:?\s*([A-D, ]+)/gi,
+    /correct.*?options?:?\s*([A-D, ]+)/gi,
+    /answers?:?\s*([A-D, ]+)/gi,
+  ];
+  
+  for (const pattern of multiPatterns) {
+    const matches = text.match(pattern);
+    if (matches) {
+      matches.forEach(match => {
+        const answerSection = match.match(/([A-D, ]+)/);
+        if (answerSection) {
+          const individualAnswers = answerSection[0].match(/[A-D]/gi);
+          if (individualAnswers) {
+            individualAnswers.forEach(char => {
+              const upperChar = char.toUpperCase();
+              if (!foundAnswers.includes(upperChar)) {
+                foundAnswers.push(upperChar);
+              }
+            });
+          }
+        }
+      });
+    }
+  }
+  
+  console.log(`🎯 Pattern detection found ${foundAnswers.length} potential answers: ${foundAnswers.join(', ')}`);
+  return foundAnswers;
 }
 
 // Detect PDF type from buffer
@@ -364,7 +411,9 @@ CRITICAL ANALYSIS INSTRUCTIONS:
         "confidence": "high/medium/low",
         "extractionMethod": "${extractionMethod}"
      }
-   - correctAnswer index: 0=A, 1=B, 2=C, 3=D
+ // To:
+   - correctAnswer: array of indices [0,1] for multiple correct answers
+   - For single answer: [0] (A), for multiple: [0,2] (A and C)
    - Include ALL questions you can identify
 
 TEXT CONTENT:
@@ -389,12 +438,14 @@ function parseAPIResponse(response: string | null, patternAnswer: string | null,
     }
     
     if (patternAnswer && questions.length > 0) {
-      questions = questions.map(q => ({
-        ...q,
-        patternDetected: patternAnswer,
-        confidence: q.confidence || 'high',
-        extractionMethod: extractionMethod
-      }));
+// Change the parsing logic to expect arrays
+questions = questions.map(q => ({
+  ...q,
+  // Ensure correctAnswer is always an array
+  correctAnswer: Array.isArray(q.correctAnswer) ? q.correctAnswer : [q.correctAnswer],
+  patternDetected: patternAnswer,
+  extractionMethod: extractionMethod
+}));
     } else {
       questions = questions.map(q => ({
         ...q,
@@ -461,7 +512,8 @@ async function processTextPDF(buffer: Buffer): Promise<Question[]> {
     const apiResponse = await sendToDeepSeek(prompt, 'text PDF');
     
     if (apiResponse) {
-      const questions = parseAPIResponse(apiResponse, correctAnswerPattern, 'direct');
+let questions = parseAPIResponse(apiResponse, null, 'direct');
+questions = assignPatternsToQuestions(questions, fullText);
       return questions.map(q => ({ ...q, page: 'full_document' }));
     } else {
       console.log('❌ API call failed, falling back to image processing...');
@@ -494,7 +546,8 @@ async function processImagePDF(buffer: Buffer): Promise<Question[]> {
         const apiResponse = await sendToDeepSeek(prompt, `page ${pageImage.page}`);
         
         if (apiResponse) {
-          const questions = parseAPIResponse(apiResponse, textData.correctAnswerPattern, 'ocr');
+let questions = parseAPIResponse(apiResponse, null, 'ocr');
+questions = assignPatternsToQuestions(questions, textData.cleanedText);
           const enhancedQuestions = questions.map(q => ({
             ...q,
             page: pageImage.page,
@@ -609,4 +662,58 @@ export async function POST(request: Request) {
       }
     });
   }
+}
+// Enhanced pattern detection that finds answers near each question
+function findCorrectAnswerForQuestion(questionText: string, fullText: string): string[] {
+  const questionLower = questionText.toLowerCase();
+  const fullTextLower = fullText.toLowerCase();
+  
+  // Find the position of this question in the full text
+  const questionIndex = fullTextLower.indexOf(questionLower);
+  if (questionIndex === -1) return [];
+  
+  // Look for answer patterns in the vicinity of this question (next 500 characters)
+  const searchWindow = fullText.substring(questionIndex, questionIndex + 500);
+  
+  const patterns = [
+    /✓\s*[A-D]/gi,
+    /\*\s*[A-D]/gi,
+    /\[[xX✓]\][A-D]/gi,
+    /[A-D]\s*\(correct\)/gi,
+    /[A-D]\s*✅/gi,
+    /correct.*?[A-D]/gi,
+    /answer.*?[A-D]/gi,
+  ];
+  
+  const foundAnswers: string[] = [];
+  
+  for (const pattern of patterns) {
+    const matches = searchWindow.match(pattern);
+    if (matches) {
+      matches.forEach(match => {
+        const answerChars = match.match(/[A-D]/gi);
+        if (answerChars) {
+          answerChars.forEach(char => {
+            const upperChar = char.toUpperCase();
+            if (!foundAnswers.includes(upperChar)) {
+              foundAnswers.push(upperChar);
+            }
+          });
+        }
+      });
+    }
+  }
+  
+  return foundAnswers;
+}
+
+// Alternative: Extract patterns for each question after API response
+function assignPatternsToQuestions(questions: Question[], fullText: string): Question[] {
+  return questions.map(question => {
+    const questionPatterns = findCorrectAnswerForQuestion(question.question, fullText);
+    return {
+      ...question,
+      patternDetected: questionPatterns.length > 0 ? questionPatterns : undefined
+    };
+  });
 }

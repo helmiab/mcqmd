@@ -7,7 +7,7 @@ interface Question {
   id: string;
   question_text: string;
   options: string[];
-  correct_answer: string;
+  correct_answer: string[];
   confidence: string;
   extraction_method: string;
   pattern_detected?: string;
@@ -32,11 +32,18 @@ export default function Reviewer() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
   const [stats, setStats] = useState({
     confirmed: 0,
     skipped: 0,
     totalReviewed: 0
   });
+    const currentQuestion = currentQuestions[currentQuestionIndex];
+      const arraysEqual = (a: string[], b: string[]): boolean => {
+    if (!a || !b) return false;
+    if (a.length !== b.length) return false;
+    return a.every((val, index) => val === b[index]);
+  };
 
   useEffect(() => {
     const getSession = async () => {
@@ -53,6 +60,39 @@ export default function Reviewer() {
       authListener.subscription.unsubscribe();
     };
   }, []);
+
+useEffect(() => {
+  if (currentQuestion) {
+    console.log('Raw correct_answer:', currentQuestion.correct_answer);
+    
+    let cleanedAnswers: string[] = [];
+    
+    if (Array.isArray(currentQuestion.correct_answer)) {
+      // If it's already an array, clean it
+      cleanedAnswers = currentQuestion.correct_answer
+        .filter(answer => 
+          answer && 
+          typeof answer === 'string' && 
+          answer.trim() !== '' && 
+          answer.trim() !== ','
+        )
+        .map(answer => answer.trim());
+    } else if (typeof currentQuestion.correct_answer === 'string') {
+      // If it's a string, split by commas and clean
+      cleanedAnswers = currentQuestion.correct_answer
+        .split(',')
+        .filter(answer => 
+          answer && 
+          answer.trim() !== '' && 
+          answer.trim() !== ','
+        )
+        .map(answer => answer.trim());
+    }
+    
+    console.log('Cleaned answers:', cleanedAnswers);
+    setSelectedAnswers(cleanedAnswers);
+  }
+}, [currentQuestion]);
 
   const startReviewing = async () => {
     setLoading(true);
@@ -85,55 +125,59 @@ export default function Reviewer() {
     }
   };
 
-  const handleQuestionAction = async (action: 'confirm' | 'skip') => {
-    if (!currentQuestions.length) return;
+const handleQuestionAction = async (action: 'confirm' | 'skip') => {
+  if (!currentQuestions.length) return;
 
-    const currentQuestion = currentQuestions[currentQuestionIndex];
-    setLoading(true);
+  const currentQuestion = currentQuestions[currentQuestionIndex];
+  setLoading(true);
 
-    try {
-      const res = await fetch('/api/review', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          questionId: currentQuestion.id,
-          action: action
-        }),
-      });
+  try {
+    const res = await fetch('/api/review', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        questionId: currentQuestion.id,
+        action: action,
+        correctAnswers: action === 'confirm' ? selectedAnswers : undefined
+      }),
+    });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to update question');
-      }
-
-      // Update stats
-      setStats(prev => ({
-        ...prev,
-        [action === 'confirm' ? 'confirmed' : 'skipped']: prev[action === 'confirm' ? 'confirmed' : 'skipped'] + 1,
-        totalReviewed: prev.totalReviewed + 1
-      }));
-
-      // Move to next question or finish
-      if (currentQuestionIndex < currentQuestions.length - 1) {
-        setCurrentQuestionIndex(prev => prev + 1);
-        setMessage(`✅ Question ${action === 'confirm' ? 'confirmed' : 'skipped'}. ${currentQuestions.length - currentQuestionIndex - 1} questions remaining.`);
-      } else {
-        setMessage(`🎉 Finished reviewing all questions in this PDF! ${action === 'confirm' ? 'Confirmed' : 'Skipped'} the last question.`);
-        setIsReviewing(false);
-        setCurrentPdf(null);
-        setCurrentQuestions([]);
-      }
-
-    } catch (error) {
-      console.error('Error updating question:', error);
-      setMessage(`❌ Error: ${(error as Error).message}`);
-    } finally {
-      setLoading(false);
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to update question');
     }
-  };
+
+    // Update stats
+    setStats(prev => ({
+      ...prev,
+      [action === 'confirm' ? 'confirmed' : 'skipped']: prev[action === 'confirm' ? 'confirmed' : 'skipped'] + 1,
+      totalReviewed: prev.totalReviewed + 1
+    }));
+
+    // RESET SELECTED ANSWERS HERE - Add this line
+    setSelectedAnswers([]);
+
+    // Move to next question or finish
+    if (currentQuestionIndex < currentQuestions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+      setMessage(`✅ Question ${action === 'confirm' ? 'confirmed' : 'skipped'}. ${currentQuestions.length - currentQuestionIndex - 1} questions remaining.`);
+    } else {
+      setMessage(`🎉 Finished reviewing all questions in this PDF! ${action === 'confirm' ? 'Confirmed' : 'Skipped'} the last question.`);
+      setIsReviewing(false);
+      setCurrentPdf(null);
+      setCurrentQuestions([]);
+    }
+
+  } catch (error) {
+    console.error('Error updating question:', error);
+    setMessage(`❌ Error: ${(error as Error).message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const stopReviewing = () => {
     setIsReviewing(false);
@@ -156,7 +200,7 @@ export default function Reviewer() {
     );
   }
 
-  const currentQuestion = currentQuestions[currentQuestionIndex];
+
   const handleLogout = async () => {
   try {
     const { error } = await supabase.auth.signOut();
@@ -169,6 +213,26 @@ export default function Reviewer() {
     setMessage('❌ Error logging out');
   }
 };
+const handleOptionSelect = (optionLetter: string) => {
+  if (!currentQuestion) return;
+  
+  console.log('Selected option letter:', optionLetter);
+  console.log('Current selectedAnswers before:', selectedAnswers);
+  
+  // For review mode, allow toggling any option
+  setSelectedAnswers(prev => {
+    if (prev.includes(optionLetter)) {
+      const newAnswers = prev.filter(letter => letter !== optionLetter);
+      console.log('After removing:', newAnswers);
+      return newAnswers;
+    } else {
+      const newAnswers = [...prev, optionLetter];
+      console.log('After adding:', newAnswers);
+      return newAnswers;
+    }
+  });
+};
+
 
   return (
     <div className="admin-container">
@@ -365,54 +429,71 @@ export default function Reviewer() {
                 </div>
 
                 {/* Options */}
-                <div className="options-section">
-                  <h4>Multiple Choice Options</h4>
-                  <div className="options-list">
-                    {currentQuestion.options.map((option, index) => (
-                      <div
-                        key={index}
-                        className={`option-item ${
-                          option.startsWith(currentQuestion.correct_answer + '.') 
-                            ? 'correct' 
-                            : ''
-                        }`}
-                      >
-                        <div className="option-text">{option}</div>
-                        {option.startsWith(currentQuestion.correct_answer + '.') && (
-                          <div className="correct-badge">✓ Correct Answer</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+       {/* Options */}
+<div className="options-section">
+  <h4>Multiple Choice Options</h4>
+  <div className="options-list">
+    {currentQuestion.options.map((option, index) => {
+      const optionLetter = option.split('.')[0].trim();
+      const isSelected = selectedAnswers.includes(optionLetter);
+      const isCorrect = Array.isArray(currentQuestion.correct_answer) 
+        ? currentQuestion.correct_answer.includes(optionLetter)
+        : currentQuestion.correct_answer === optionLetter;
+      
+      return (
+        <div
+          key={index}
+          className={`option-item ${isSelected ? 'selected' : ''} ${
+            isCorrect ? 'correct' : ''
+          }`}
+          onClick={() => handleOptionSelect(optionLetter)}
+        >
+          <div className="option-header">
+            <div className="option-selector">
+              {isSelected ? '✓' : ''}
+            </div>
+            <div className="option-text">{option}</div>
+          </div>
+          {isCorrect && (
+            <div className="correct-badge">Expected Answer</div>
+          )}
+        </div>
+      );
+    })}
+  </div>
+</div>
 
                 {/* Action Buttons */}
-                <div className="action-buttons">
-                  <button
-                    onClick={() => handleQuestionAction('skip')}
-                    disabled={loading}
-                    className={`action-button skip-button ${loading ? 'loading' : ''}`}
-                  >
-                    {loading ? (
-                      <span className="button-spinner"></span>
-                    ) : (
-                      <span className="button-icon">⏭️</span>
-                    )}
-                    Skip Question
-                  </button>
-                  <button
-                    onClick={() => handleQuestionAction('confirm')}
-                    disabled={loading}
-                    className={`action-button confirm-button ${loading ? 'loading' : ''}`}
-                  >
-                    {loading ? (
-                      <span className="button-spinner"></span>
-                    ) : (
-                      <span className="button-icon">✅</span>
-                    )}
-                    Confirm Question
-                  </button>
-                </div>
+             {/* Action Buttons */}
+{/* Action Buttons */}
+<div className="action-buttons">
+  <button
+    onClick={() => handleQuestionAction('skip')}
+    disabled={loading}
+    className={`action-button skip-button ${loading ? 'loading' : ''}`}
+  >
+    {loading ? (
+      <span className="button-spinner"></span>
+    ) : (
+      <span className="button-icon">⏭️</span>
+    )}
+    Skip Question
+  </button>
+  <button
+    onClick={() => handleQuestionAction('confirm')}
+    disabled={loading || selectedAnswers.length === 0}
+    className={`action-button confirm-button ${loading ? 'loading' : ''} ${
+      selectedAnswers.length === 0 ? 'disabled' : ''
+    }`}
+  >
+    {loading ? (
+      <span className="button-spinner"></span>
+    ) : (
+      <span className="button-icon">✅</span>
+    )}
+    Confirm {selectedAnswers.length} Answer{selectedAnswers.length !== 1 ? 's' : ''}
+  </button>
+</div>
               </div>
             </div>
           </div>
@@ -1131,6 +1212,59 @@ export default function Reviewer() {
   .header-title {
     font-size: 1.25rem;
   }
+}
+  .option-item {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.option-item:hover {
+  background: #f8f9fa;
+}
+
+.option-item.selected {
+  border-color: #0070f3;
+  background: #e7f3ff;
+}
+
+.option-item.correct {
+  border-color: #198754;
+}
+
+.option-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.option-selector {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #6c757d;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.option-item.selected .option-selector {
+  background: #0070f3;
+  border-color: #0070f3;
+  color: white;
+}
+
+.confirm-button.disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.confirm-button.disabled:hover {
+  background: #6c757d;
+  transform: none;
 }
 
 @media (max-width: 480px) {

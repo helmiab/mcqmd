@@ -60,17 +60,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { questionId, action } = body; // action: 'confirm' or 'skip'
+    const { questionId, action, correctAnswers } = body; // Add correctAnswers parameter
 
     if (!questionId) {
       return NextResponse.json({ error: 'Question ID is required' }, { status: 400 });
     }
 
     if (action === 'confirm') {
-      // First, get the current review_count
+      // First, get the current question
       const { data: currentQuestion, error: fetchError } = await supabase
         .from('questions')
-        .select('review_count')
+        .select('*')
         .eq('id', questionId)
         .single();
 
@@ -79,11 +79,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Database error' }, { status: 500 });
       }
 
-      // Increment review_count by 1
+      // Update with correctAnswers array (convert from frontend format if needed)
       const { data, error } = await supabase
         .from('questions')
         .update({ 
           review_count: (currentQuestion.review_count || 0) + 1,
+          correct_answer: correctAnswers, // This should now be an array
           updated_at: new Date().toISOString()
         })
         .eq('id', questionId)
